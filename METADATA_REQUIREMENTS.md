@@ -4,18 +4,21 @@
 
 ### Main Requirements:
 - ✅ **Generation based on image analysis** - title is formed exclusively based on AI analysis of image content
-- ✅ **Maximum 10 words** - title must contain no more than 10 words
-- ✅ **No word repetitions** - each word in title must be unique (not repeated)
+- ✅ **6-10 words** - title must contain no more than 10 words; a title of 5 words or less is padded with AI keywords (not description words, no singular/plural duplicates)
+- ✅ **Reads as a phrase** - linking words between content words are kept: "Railway Tracks and White Car Through Pine Forest", "Young Man Climbs Rocky Mound in Sunny Woodland"
+- ✅ **No word repetitions** - each content word in title must be unique (not repeated)
 - ✅ **English text only** - no other languages
 - ✅ **No special characters** - only English letters, numbers and spaces
 - ✅ **Uniqueness** - title should not repeat for different images (previous title is tracked)
-- ✅ **Format** - each word with capital letter (Title Case)
+- ✅ **Format** - each word with capital letter (Title Case); linking words of 3 letters or less (and, in, of...) are lowercase
+
+### Linking words (kept between content words, never first or last, never two in a row):
+- and, or, at, in, on, of, for, to, with, by, from, into, onto, through, toward, towards, past, over, under, beneath, beside, along, across, around, near, between, behind, above, below, inside, among, amid
+- They are **not title words**: the description may use them, keywords never contain them
 
 ### Excluded words (stop words):
 - Articles: the, a, an
-- Prepositions: of, in, on, at, to, for, with
 - Linking verbs: is, are, was, were
-- Conjunctions: and, or, but
 - Demonstrative pronouns: this, that, these, those
 - Personal pronouns: it, its, they, them, what, you
 - Common words: see, image, photography, photo, picture, detailed, describe, scene, happening, showing, view
@@ -29,85 +32,39 @@
 ## DESCRIPTION
 
 ### Main Requirements:
-- ✅ **Generation based on image analysis** - description is formed exclusively based on AI analysis of image content
-- ✅ **Must NOT repeat title** - CRITICALLY IMPORTANT: description must NOT contain words already used in title
-- ✅ **Must NOT contain keywords** - CRITICALLY IMPORTANT: description must NOT contain words used in keywords
-- ✅ **Maximum 80 characters** - strict length limit
-- ✅ **Minimum 15 characters** - description must be informative
-- ✅ **English text only** - no other languages
-- ✅ **No special characters** - only English letters, numbers and spaces
-- ✅ **Uniqueness** - description should not repeat for different images (previous description is tracked)
-- ✅ **Informativeness** - must contain information about the photo, be unique and informative
-- ✅ **Format** - first letter capital, rest lowercase (Capitalize)
+- ✅ **Natural sentence from image analysis** - the AI writes one grammatical sentence; it is kept as a phrase (not rebuilt from separate words)
+- ✅ **Must NOT repeat title** - CRITICALLY IMPORTANT: if the AI sentence uses title content words (or generic words), a text-only request asks the AI to rewrite it without them - up to 3 attempts, each told what was wrong with the previous one. If no attempt is clean, the sentence is **cut before the first forbidden word** (at least 6 words must remain); words are never cut out of the middle of the sentence, except as a last resort
+- ✅ **Must NOT share words with keywords** - CRITICALLY IMPORTANT: description words are removed from keywords
+- ✅ **15-80 characters, more than 5 words** - a longer sentence is rewritten by the AI; if it is still too long, it is cut before the last unfinished phrase ("...through sunny woods", not "...through sunny woods and rocky") and never ends with an article or preposition
+- ✅ **Hyphenated words** - hyphens, dashes and slashes become spaces ("forward facing", not "forwardfacing")
+- ✅ **English text only, no special characters**
+- ✅ **Format** - first letter capital
+- ✅ Articles and prepositions (a, the, on, with...) are allowed for grammar
 
-### Prohibited phrases (general phrases):
-- ❌ "Professional photography image"
-- ❌ "High quality professional image"
-- ❌ "Detailed view of scene"
-- ❌ "Scene showing detailed view"
-- ❌ "Scene with various elements"
-- ❌ "View showing scene details"
-- ❌ "Detailed scene view"
-- ❌ "Scene"
-- ❌ "Scene details"
-- ❌ "High quality"
-- ❌ "Professional image"
+### Removed generic words:
+- see, image, photography, photo, picture, detailed, describe, scene, happening, showing, view, professional, high, quality, list, main, objects, colors, elements
 
-### Excluded words (stop words):
-- Articles: the, a, an
-- Prepositions: of, in, on, at, to, for, with
-- Linking verbs: is, are, was, were
-- Conjunctions: and, or, but
-- Demonstrative pronouns: this, that, these, those
-- Personal pronouns: it, its, they, them, what, you
-- Common words: see, image, photography, photo, picture, detailed, describe, scene, happening, list, main, objects, colors, elements, professional, showing, view, high, quality
-
-### Data Source:
-- Only words from AI image analysis (captions from BLIP model)
-- Words from title are excluded
-- Words from keywords are excluded
-- Predefined lists or templates are NOT used
+### Fallback:
+- If fewer than 6 words remain after removing title words, description is built from analysis words (without title words)
 
 ---
 
 ## KEYWORDS
 
 ### Main Requirements:
-- ✅ **Exactly 50 words** - CRITICALLY IMPORTANT: keywords must contain exactly 50 individual words
-- ✅ **Only individual words** - each keyword must be a single word (not a phrase)
-- ✅ **Generation based on image analysis** - keywords are formed EXCLUSIVELY based on the analyzed image
-- ✅ **NOT taken from title** - keywords must NOT contain words already used in title
-- ✅ **NOT taken from description** - CRITICALLY IMPORTANT: keywords must NOT contain words used in description
-- ✅ **English text only** - no other languages
-- ✅ **No special characters** - only English letters, numbers (cleaned from all special characters)
-- ✅ **Uniqueness** - each word in keywords must be unique (not repeated)
-- ✅ **Minimum 3 characters** - each word must contain at least 3 characters
-- ✅ **Format** - all words lowercase, separated by comma and space (", ")
+- ✅ **Up to 49 words** - Adobe Stock limit; the AI is asked for 65 words so that enough remain after filtering
+- ✅ **Warning below 25 words** - fewer keywords are written as is, processing continues
+- ✅ **Only real words from AI analysis** - no generated variations (adding "s", cutting endings)
+- ✅ **Only individual words** - phrases from AI are skipped
+- ✅ **NOT taken from title**, **NOT taken from description**
+- ✅ **No singular/plural duplicates** (swing / swings)
+- ✅ **Unique, minimum 3 characters, lowercase, separated by ", "**
+- ✅ **Order** - AI order (most relevant first), then other words from AI title/description analysis
+- ✅ **Vertical video** - starts with "vertical, video"
 
 ### Excluded words (stop words):
-- Articles: the, a, an
-- Prepositions: of, in, on, at, to, for, with
-- Linking verbs: is, are, was, were
-- Conjunctions: and, or, but
-- Demonstrative pronouns: this, that, these, those
-- Personal pronouns: it, its, they, them, what, you
-- Common words: see, image, photography, photo, picture, shot, capture, professional, high, quality, detailed, sharp, clear, vibrant, colorful, bright, beautiful, stunning, amazing, artistic, creative, closeup, macro, wide, angle, vertical, horizontal, portrait, landscape, background, foreground, focus, blur, bokeh, depth, field, composition, framing, lighting, natural, light, sunlight, shadow, highlight, contrast, saturation, hue, tone, texture, pattern, detail, describe, list, main, objects, colors, scene, elements
-
-### Data Source:
-- ONLY words from AI image analysis (captions from BLIP model)
-- Predefined lists (color_keywords, nature_keywords, etc.) are NOT used
-- Templates or common words are NOT used
-- After generating description, all words present in description are removed from keywords
-
-### Generation Process:
-1. Collect all words from all image descriptions (captions)
-2. Clean from stop words
-3. Clean from special characters
-4. Split phrases into individual words (if any)
-5. Remove duplicates
-6. Supplement to 50 words from all available sources (multiple passes through descriptions)
-7. After generating description - remove words from keywords that are in description
-8. Supplement to 50 words after filtering
+- Articles, prepositions, linking verbs, conjunctions, pronouns: the, a, an, of, in, on, at, to, for, with, is, are, was, were, and, or, but, this, that, these, those, it, its, they, them, what, you, by, from, as, be, have, has, had, do, does, did, will, would, could, should, may, might, must, can, up, out, so, if, no, not, only, just, more, most, very, much, many, some, any, all, each, every, both, such, than, too, also, here, there, where, when, why, how, who, which, whose, whom
+- Common words: see, image, photography, photo, picture, detailed, describe, scene, happening, showing, view, professional, high, quality
 
 ---
 
@@ -115,18 +72,28 @@
 
 ### Data Source for All Fields:
 - ✅ All metadata is generated based on AI image analysis
-- ✅ Local BLIP model or external APIs (OpenAI, custom) are used
+- ✅ OpenAI model `gpt-6-luna` is used
 - ✅ Model analyzes image content and generates descriptions
 - ✅ Words for title, description and keywords are extracted from these descriptions
 
 ### Field Relationships:
-- ✅ Title and Description - must NOT have common words
+- ✅ Title and Description - must NOT have common words (linking words like "and", "through" are allowed)
 - ✅ Description and Keywords - must NOT have common words
-- ✅ Title and Keywords - may have common words (but preferably avoid)
+- ✅ Title and Keywords - no common words (except "vertical, video" for vertical clips)
 
 ### Recording Format:
 - ✅ All metadata is written directly to JPEG files via EXIF/IPTC
 - ✅ Stock platforms automatically pull data when uploading
+
+---
+
+## VIDEO
+
+- ✅ Video is analyzed through 3 frames (25%, 50%, 75% of the clip); Title/Description/Keywords follow the same rules as photos
+- ✅ **Vertical clips** - title ends with "Vertical Video", keywords start with "vertical, video" (Adobe Stock requirement); these words are never used in description
+- ✅ Clips not meeting Adobe Stock technical requirements are skipped (see README, section "Video (Adobe Stock)")
+- ✅ **Unique titles** - after all clips are described, a title repeated by several clips is replaced (first clip keeps it); the new title follows the same rules, keywords are rebuilt for it
+- ✅ Video files are not copied or modified - metadata is saved only to `adobe_stock_videos.csv` (Adobe Stock CSV upload) and `istock_videos.csv` (iStock / Getty ESP CSV upload) in the output folder
 
 ---
 
@@ -136,15 +103,15 @@
 
 **Title:** "Small Bird Standing Next Door"  
 **Description:** "Small bird standing next door" ← repeats title!  
-**Keywords:** "happening" ← only 1 word instead of 50!
+**Keywords:** "swing, swings, wint, snowys, colds" ← duplicates and invented words!
 
 ---
 
 ### ✅ CORRECT:
 
 **Title:** "Small Bird Standing Next Door"  
-**Description:** "Perched on wooden surface near entrance" ← unique words, not from title  
-**Keywords:** "bird, small, standing, door, next, wooden, surface, perched, entrance, outdoor, nature, wildlife, animal, feather, beak, eye, branch, tree, green, brown, gray, white, black, colorful, vibrant, natural, wild, free, flying, resting, calm, peaceful, quiet, serene, beautiful, cute, tiny, little, delicate, fragile, gentle, soft, smooth, textured, detailed, sharp, clear, bright, sunny, daylight, morning" ← exactly 50 words
+**Description:** "Perched on a wooden surface near the entrance" ← natural sentence, no title words  
+**Keywords:** "wildlife, animal, feather, beak, branch, tree, garden, brown, gray, outdoor, nature, tiny, cute, calm, ..." ← up to 49 real words, none from title or description
 
 ---
 
@@ -152,6 +119,7 @@
 
 - All requirements are strictly followed in the code
 - If any requirement is violated, a warning is generated in logs
-- If it's impossible to generate 50 keywords due to short analysis, a warning is displayed
+- The log of every run is saved to `logs/run_YYYY-MM-DD_HH-MM-SS.log` (see README, section "Logs")
+- If fewer than 25 keywords remain after filtering, a warning is displayed
 - Description is always checked for common phrases and recreated if necessary
 
