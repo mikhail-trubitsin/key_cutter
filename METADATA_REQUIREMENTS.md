@@ -92,6 +92,8 @@
 - ✅ Video is analyzed through 3 frames (25%, 50%, 75% of the clip); Title/Description/Keywords follow the same rules as photos
 - ✅ **Vertical clips** - title ends with "Vertical Video", keywords start with "vertical, video" (Adobe Stock requirement); these words are never used in description
 - ✅ Clips not meeting Adobe Stock technical requirements are skipped (see README, section "Video (Adobe Stock)")
+- ✅ **No repeated root in a title** - "Railway Rails", "Rocky Rock", "Forested Forest" are not allowed: the later word is dropped
+- ✅ **No hanging ending** - a title never ends with ahead, nearby, beyond, away, forward, back...
 - ✅ **Unique titles** - after all clips are described, a title repeated by several clips is replaced (first clip keeps it); the new title follows the same rules, keywords are rebuilt for it
 - ✅ Video files are not copied or modified - metadata is saved only to `adobe_stock_videos.csv` (Adobe Stock CSV upload) and `istock_videos.csv` (iStock / Getty ESP CSV upload) in the output folder
 

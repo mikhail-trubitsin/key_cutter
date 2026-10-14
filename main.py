@@ -67,7 +67,7 @@ def save_api_key(api_key):
         print(f"Failed to save API key to keychain: {e}")
         return False
 
-__version__ = "1.1.6"
+__version__ = "1.1.7"
 
 # Local models removed - using only OpenAI API
 
@@ -164,6 +164,16 @@ DESCRIPTION_PHRASE_STARTS = {"and", "or", "but", "as", "while", "with", "through
 TITLE_CONNECTORS = {"and", "or", "at", "in", "on", "of", "for", "to", "with", "by", "from", "into", "onto",
                     "through", "toward", "towards", "past", "over", "under", "beneath", "beside", "along",
                     "across", "around", "near", "between", "behind", "above", "below", "inside", "among", "amid"}
+# A title never ends with these: "Arch Framed by Pine Foliage Ahead" reads as cut off
+TITLE_BAD_ENDINGS = {"ahead", "nearby", "beyond", "away", "forward", "back", "again", "together", "outside",
+                     "overhead", "there", "here", "now", "today", "too", "also", "very"}
+
+
+def same_root(a, b):
+    """Words of one root: rail/railway, rock/rocky, forest/forested ("Railway Rails" repeats itself)"""
+    short, long_word = sorted((a, b), key=len)
+    stem = short[:-1] if short.endswith('s') else short
+    return short != long_word and len(stem) >= 4 and long_word.startswith(stem)
 
 # Log of every run is saved here as run_YYYY-MM-DD_HH-MM-SS.log (next to main.py)
 LOGS_DIR = Path(__file__).resolve().parent / 'logs'
@@ -779,6 +789,7 @@ class ProcessingThread(QThread):
         """Builds title from AI title: unique content words in AI order, linking words (and, in, through...)
         kept between them so the title reads as a phrase. Articles and other stop words are dropped.
         Padded with padding_words up to 6 words, limited to 10 words, required_words added at the end.
+        A word of the same root as an earlier one is dropped, the title never ends with TITLE_BAD_ENDINGS.
         Returns (title, content_words)"""
         tokens = []  # (word, is_connector)
         seen = set(required_words)
@@ -786,12 +797,13 @@ class ProcessingThread(QThread):
             if word in TITLE_CONNECTORS:
                 if tokens and not tokens[-1][1]:  # only right after a content word
                     tokens.append((word, True))
-            elif len(word) >= 3 and word not in STOP_WORDS and word not in seen:
+            elif (len(word) >= 3 and word not in STOP_WORDS and word not in seen and
+                  not any(same_root(word, other) for other in seen)):
                 tokens.append((word, False))
                 seen.add(word)
         
         def strip_trailing_connectors():
-            while tokens and tokens[-1][1]:
+            while tokens and (tokens[-1][1] or tokens[-1][0] in TITLE_BAD_ENDINGS):
                 tokens.pop()
         
         strip_trailing_connectors()
@@ -803,7 +815,8 @@ class ProcessingThread(QThread):
                                 (word.endswith('s') and word[:-1] in seen) or
                                 (word.endswith('es') and word[:-2] in seen))
             if (word not in seen and not plural_duplicate and len(word) >= 3 and word not in STOP_WORDS and
-                    word not in TITLE_CONNECTORS):
+                    word not in TITLE_CONNECTORS and word not in TITLE_BAD_ENDINGS and
+                    not any(same_root(word, other) for other in seen)):
                 tokens.append((word, False))
                 seen.add(word)
         del tokens[10 - len(required_words):]
@@ -1192,28 +1205,35 @@ class ProcessingThread(QThread):
     
     def _make_title_unique(self, metadata, taken_titles):
         """New title not in taken_titles (lowercase) and without description words.
-        Keywords are rebuilt: new title words leave them, dropped title words come back.
-        Returns (title, keywords) or None"""
+        Keywords are rebuilt for it (see retitle). Returns (title, keywords) or None"""
+        desc_words = set(self.normalize_words(metadata.get('description', '')))
+        for title_raw in self._title_candidates(metadata, taken_titles, sorted(desc_words | DESCRIPTION_BANNED_WORDS)):
+            result = self.retitle(metadata, title_raw)
+            if result and result[0].lower() not in taken_titles:
+                return result
+        return None
+    
+    def retitle(self, metadata, title_raw):
+        """Builds a new title for described clip and rebuilds its keywords: new title words leave them,
+        dropped title words come back. Returns (title, keywords) or None if the title uses description words
+        or is shorter than 6 words"""
         old_title = metadata.get('title', '')
         desc_words = set(self.normalize_words(metadata.get('description', '')))
         keywords = [k.strip() for k in metadata.get('keywords', '').split(',') if k.strip()]
         required = ['vertical', 'video'] if old_title.lower().endswith('vertical video') else []
-        padding = [k for k in keywords if k not in desc_words]
-        for title_raw in self._title_candidates(metadata, taken_titles, sorted(desc_words | DESCRIPTION_BANNED_WORDS)):
-            title, title_words = self.build_title(title_raw, padding, required)
-            if title.lower() in taken_titles or set(title_words) & desc_words or len(title_words) < 6:
+        title, title_words = self.build_title(title_raw, [k for k in keywords if k not in desc_words], required)
+        if set(title_words) & desc_words or len(title_words) < 6:
+            return None
+        new_keywords = [k for k in keywords if k in required or k not in title_words]
+        for word in self.normalize_words(old_title):
+            if len(new_keywords) >= MAX_KEYWORDS:
+                break
+            if (len(word) < 3 or word in STOP_WORDS or word in TITLE_CONNECTORS or word in TITLE_BAD_ENDINGS or
+                    word in title_words or word in desc_words or word in new_keywords or
+                    word + 's' in new_keywords or (word.endswith('s') and word[:-1] in new_keywords)):
                 continue
-            new_keywords = [k for k in keywords if k in required or k not in title_words]
-            for word in self.normalize_words(old_title):
-                if len(new_keywords) >= MAX_KEYWORDS:
-                    break
-                if (len(word) < 3 or word in STOP_WORDS or word in TITLE_CONNECTORS or word in title_words or
-                        word in desc_words or word in new_keywords or word + 's' in new_keywords or
-                        (word.endswith('s') and word[:-1] in new_keywords)):
-                    continue
-                new_keywords.append(word)
-            return title, ', '.join(new_keywords)
-        return None
+            new_keywords.append(word)
+        return title, ', '.join(new_keywords)
     
     def _title_candidates(self, metadata, taken_titles, forbidden_words):
         """Title variants: up to 3 from AI, then the old title with one of the keywords added"""

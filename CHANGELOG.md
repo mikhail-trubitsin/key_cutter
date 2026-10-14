@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.7
+
+### Fixed
+- A title no longer repeats one root: a word of the same root as an earlier one is dropped ("Railway Rails Curve" -> "Railway Curve", also rock/rocky, forest/forested, snow/snowman)
+- A title no longer ends with a hanging adverb (ahead, nearby, beyond, away...): "Arch Framed by Pine Foliage Ahead" -> "Arch Framed by Pine Foliage"
+- Both rules apply to every title: photos, videos and titles replaced by the recheck
+
 ## 1.1.6
 
 ### Added

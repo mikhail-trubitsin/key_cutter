@@ -154,7 +154,8 @@ class MetadataRulesTest(unittest.TestCase):
 
         response = dict(response, title="Snowman Stick Arms")
         metadata = generate(self.thread, response, HD)
-        self.assertEqual(metadata["title"], "Snowman Stick Arms Snow Twig Mountain")  # not "Sticks", not "Drifts"
+        # not "Sticks" (plural), not "Snow" (same root as Snowman), not "Drifts" (description word)
+        self.assertEqual(metadata["title"], "Snowman Stick Arms Twig Mountain River")
         self.assertIn('drifts', metadata['description'])  # padding does not take description words
 
     def test_description_rewrite_when_title_words_used(self):
@@ -216,6 +217,39 @@ class BuildTitleTest(unittest.TestCase):
         self.assertEqual(title, "One Two Three Four Five Six Seven Eight Nine")
         title = self.title("One Two Three Four Five Six Seven And Eight Nine", required=['vertical', 'video'])
         self.assertEqual(title, "One Two Three Four Five Six Seven Vertical Video")
+
+
+class TitleQualityTest(unittest.TestCase):
+    def setUp(self):
+        self.thread = make_thread()
+
+    def test_same_root(self):
+        for a, b in (('rail', 'railway'), ('rails', 'railway'), ('rock', 'rocky'), ('forest', 'forested'),
+                     ('snow', 'snowman'), ('track', 'tracks')):
+            self.assertTrue(main.same_root(a, b), (a, b))
+        for a, b in (('train', 'track'), ('sun', 'sunny'), ('pine', 'spine'), ('green', 'green')):
+            self.assertFalse(main.same_root(a, b), (a, b))
+
+    def test_word_of_same_root_is_dropped(self):
+        title, words = self.thread.build_title("Railway Rails Curve Beside Pine Trees and Platform", [])
+        self.assertEqual(title, "Railway Curve Beside Pine Trees and Platform")
+        title, _ = self.thread.build_title("Rocky Gorge With Rock Walls and Forested Forest Slopes", [])
+        self.assertEqual(title, "Rocky Gorge With Walls and Forested Slopes")
+
+    def test_title_does_not_end_with_adverb(self):
+        title, _ = self.thread.build_title("Sunlit Concrete Arch Framed by Pine Foliage Ahead", [])
+        self.assertEqual(title, "Sunlit Concrete Arch Framed by Pine Foliage")
+        title, _ = self.thread.build_title("Old Train Station Building Standing Nearby", ['ahead', 'platform'])
+        self.assertEqual(title, "Old Train Station Building Standing Platform")
+
+    def test_retitle_rebuilds_keywords(self):
+        meta = {'title': "Railway Rails Curve Beside Pine Trees and Platform",
+                'description': "A moving viewpoint follows a curved path past a rural station",
+                'keywords': "train, bend, gravel, sleepers, summer"}
+        title, keywords = self.thread.retitle(meta, "Train Rails Bend Beside Pine Trees and Platform")
+        self.assertEqual(title, "Train Rails Bend Beside Pine Trees and Platform")
+        self.assertEqual(keywords, "gravel, sleepers, summer, railway, curve")
+        self.assertIsNone(self.thread.retitle(meta, "Train Rails Bend Past Rural Station Platform"))  # description words
 
 
 class BuildDescriptionTest(unittest.TestCase):
