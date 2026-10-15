@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.10
+
+### Added
+- `shot speed` in the iStock CSV is filled (ESP requires it, an empty value blocks submitting): new **Shot speed (iStock)** setting with the ESP values Real Time / Slow Motion / Time Lapse, default Real Time, remembered between launches
+
 ## 1.1.9
 
 ### Added

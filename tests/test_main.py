@@ -502,6 +502,16 @@ class IstockTemplateTest(unittest.TestCase):
             self.assertEqual(main.load_istock_fields(template), ['title', 'file name', 'new column'])
             self.assertEqual(main.load_istock_fields(Path(tmp) / 'missing.csv'), main.ISTOCK_DEFAULT_FIELDS)
 
+    def test_shot_speed_values_are_esp_values(self):
+        self.assertEqual(main.SHOT_SPEEDS, ['Real Time', 'Slow Motion', 'Time Lapse'])
+        with tempfile.TemporaryDirectory() as tmp:
+            thread = main.ProcessingThread('.', tmp, api_key=None, shot_speed='Time Lapse')
+            thread._video_rows.append({'filename': 'x.mov', 'created': '', 'poster': '',
+                                       'metadata': {'title': 'T', 'description': 'D', 'keywords': 'a'}})
+            thread.write_video_csvs()
+            with open(Path(tmp) / main.ISTOCK_VIDEO_CSV_NAME, newline='', encoding='utf-8') as f:
+                self.assertEqual(next(csv.DictReader(f))['shot speed'], 'Time Lapse')
+
     def test_row_follows_template_order(self):
         with tempfile.TemporaryDirectory() as tmp:
             thread = make_thread(output_folder=tmp, country='Serbia')
@@ -674,7 +684,7 @@ class BatchProcessingTest(unittest.TestCase):
             self.assertEqual(istock_row['country'], 'Serbia')
             self.assertEqual(istock_row['poster timecode'], '00:00:03:00')  # middle of a 6 s clip
             self.assertEqual(istock_row['date created'], '')  # no date in test file names
-            self.assertEqual(istock_row['shot speed'], '')
+            self.assertEqual(istock_row['shot speed'], 'Real Time')  # default
 
         # Videos are not copied, photo is copied with metadata
         self.assertEqual(sorted(p.name for p in self.output.iterdir()),

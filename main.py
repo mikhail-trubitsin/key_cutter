@@ -67,7 +67,7 @@ def save_api_key(api_key):
         print(f"Failed to save API key to keychain: {e}")
         return False
 
-__version__ = "1.1.9"
+__version__ = "1.1.10"
 
 # Local models removed - using only OpenAI API
 
@@ -105,6 +105,8 @@ ISTOCK_VIDEO_CSV_NAME = 'istock_videos.csv'
 ISTOCK_TEMPLATE_PATH = Path(__file__).resolve().parent / 'csv-templates' / 'istock-MetadataTemplate.csv'
 ISTOCK_DEFAULT_FIELDS = ['file name', 'description', 'title', 'country', 'poster timecode', 'keywords',
                          'shot speed', 'date created']
+# ESP values for shot speed; one value for the whole run (Settings)
+SHOT_SPEEDS = ['Real Time', 'Slow Motion', 'Time Lapse']
 
 
 def load_istock_fields(template_path=ISTOCK_TEMPLATE_PATH):
@@ -208,9 +210,11 @@ class ProcessingThread(QThread):
     log_message = pyqtSignal(str)
     finished = pyqtSignal(list)  # list of data for CSV
     
-    def __init__(self, input_folder, output_folder, generate_metadata=True, api_key=None, country=''):
+    def __init__(self, input_folder, output_folder, generate_metadata=True, api_key=None, country='',
+                 shot_speed=SHOT_SPEEDS[0]):
         super().__init__()
         self.country = country  # Country of shoot for iStock CSV
+        self.shot_speed = shot_speed  # Shot speed for iStock CSV (required by ESP)
         self._video_rows = []  # Video CSV rows: filename, metadata, created date, poster timecode
         self.input_folder = input_folder
         self.output_folder = output_folder
@@ -1189,11 +1193,11 @@ class ProcessingThread(QThread):
         for row in self._video_rows:
             meta = row['metadata']
             adobe.append([row['filename'], meta.get('title', ''), meta.get('keywords', ''), '', ''])
-            # Template columns we have no data for (shot speed) stay empty: set them in ESP
+            # Template columns we have no data for stay empty: set them in ESP
             values = {'file name': row['filename'], 'description': meta.get('description', ''),
                       'title': meta.get('title', ''), 'country': self.country, 'poster timecode': row['poster'],
                       'keywords': meta.get('istock_keywords') or meta.get('keywords', ''),
-                      'date created': row['created']}
+                      'shot speed': self.shot_speed, 'date created': row['created']}
             istock.append([values.get(name, '') for name in ISTOCK_VIDEO_CSV_FIELDS])
         # iStock: line endings as in the ESP template (\n)
         for csv_name, rows, line_end in ((VIDEO_CSV_NAME, adobe, '\r\n'), (ISTOCK_VIDEO_CSV_NAME, istock, '\n')):
@@ -1583,6 +1587,17 @@ class KeyCutterApp(QMainWindow):
         country_layout.addWidget(self.country_edit)
         settings_layout.addLayout(country_layout)
         
+        # Shot speed for iStock CSV (ESP requires it), remembered between launches
+        shot_speed_layout = QHBoxLayout()
+        shot_speed_label = QLabel("Shot speed (iStock):")
+        self.shot_speed_combo = QComboBox()
+        self.shot_speed_combo.addItems(SHOT_SPEEDS)
+        saved_speed = QSettings(KEYRING_SERVICE, 'app').value('istock_shot_speed', SHOT_SPEEDS[0], type=str)
+        self.shot_speed_combo.setCurrentText(saved_speed if saved_speed in SHOT_SPEEDS else SHOT_SPEEDS[0])
+        shot_speed_layout.addWidget(shot_speed_label)
+        shot_speed_layout.addWidget(self.shot_speed_combo)
+        settings_layout.addLayout(shot_speed_layout)
+        
         settings_group.setLayout(settings_layout)
         layout.addWidget(settings_group)
         
@@ -1660,6 +1675,8 @@ class KeyCutterApp(QMainWindow):
         
         country = self.country_edit.text().strip()
         QSettings(KEYRING_SERVICE, 'app').setValue('istock_country', country)
+        shot_speed = self.shot_speed_combo.currentText()
+        QSettings(KEYRING_SERVICE, 'app').setValue('istock_shot_speed', shot_speed)
         
         self.log(f"[UI] Creating processing thread: api_type=openai (GPT), generate_metadata=True")
         
@@ -1669,7 +1686,8 @@ class KeyCutterApp(QMainWindow):
             self.output_folder,
             generate_metadata=True,  # Always enabled
             api_key=api_key,  # Using automatic key, if no other specified
-            country=country
+            country=country,
+            shot_speed=shot_speed
         )
         self.processing_thread.progress.connect(self.update_progress)
         self.processing_thread.log_message.connect(self.log)

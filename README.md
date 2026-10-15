@@ -110,7 +110,7 @@ For clips that pass:
 - iStock keywords are Getty vocabulary terms (`sleepers` -> `Railroad Tie`): keep **esp.gettyimages.com** open in Chrome and enable **View > Developer > Allow JavaScript from Apple Events** so new words can be looked up (requests only read from ESP); known words are taken from `istock_vocabulary.json`; see `[iStock]` in the log
 - Adobe Stock: upload the clips to Adobe Stock Contributor, then in Uploaded Files > New click **Upload CSV**; filenames must match exactly (extension and case)
 - iStock: upload the clips to the ESP batch, then in the metadata panel open **Templates > Upload and apply** and choose `istock_videos.csv`
-- iStock CSV fields: columns and their order are taken from the ESP template, replace `csv-templates/istock-MetadataTemplate.csv` if Getty changes it; `shot speed` is left empty (set it in ESP); `date created` is the shooting date from the camera file name (`DJI_20260525...` -> `05/25/2026`, empty if the name has no date); `country` comes from **Settings > Country of shoot (iStock)** (use the name from the ESP list, e.g. `Serbia`); `poster timecode` is the middle frame of the clip
+- iStock CSV fields: columns and their order are taken from the ESP template, replace `csv-templates/istock-MetadataTemplate.csv` if Getty changes it; `shot speed` comes from **Settings > Shot speed (iStock)** (Real Time by default; ESP requires it); `date created` is the shooting date from the camera file name (`DJI_20260525...` -> `05/25/2026`, empty if the name has no date); `country` comes from **Settings > Country of shoot (iStock)** (use the name from the ESP list, e.g. `Serbia`); `poster timecode` is the middle frame of the clip
 
 Video support requires **ffmpeg** (`brew install ffmpeg`).
 
