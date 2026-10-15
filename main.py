@@ -67,7 +67,7 @@ def save_api_key(api_key):
         print(f"Failed to save API key to keychain: {e}")
         return False
 
-__version__ = "1.1.7"
+__version__ = "1.1.8"
 
 # Local models removed - using only OpenAI API
 
@@ -98,7 +98,24 @@ OPENAI_MODEL = 'gpt-6-luna'
 VIDEO_CSV_NAME = 'adobe_stock_videos.csv'
 # iStock (Getty ESP): Templates > Upload and apply
 ISTOCK_VIDEO_CSV_NAME = 'istock_videos.csv'
-ISTOCK_VIDEO_CSV_FIELDS = ['file name', 'created date', 'title', 'description', 'keywords', 'country', 'poster timecode']
+# Columns and their order come from the ESP template (csv-templates/istock-MetadataTemplate.csv):
+# replace that file if Getty changes the template
+ISTOCK_TEMPLATE_PATH = Path(__file__).resolve().parent / 'csv-templates' / 'istock-MetadataTemplate.csv'
+ISTOCK_DEFAULT_FIELDS = ['file name', 'description', 'title', 'country', 'poster timecode', 'keywords',
+                         'shot speed', 'date created']
+
+
+def load_istock_fields(template_path=ISTOCK_TEMPLATE_PATH):
+    """Header row of the ESP template, ISTOCK_DEFAULT_FIELDS if the template is missing or empty"""
+    try:
+        with open(template_path, newline='', encoding='utf-8-sig') as f:
+            header = [name.strip() for name in next(csv.reader(f), [])]
+        return [name for name in header if name] or ISTOCK_DEFAULT_FIELDS
+    except OSError:
+        return ISTOCK_DEFAULT_FIELDS
+
+
+ISTOCK_VIDEO_CSV_FIELDS = load_istock_fields()
 
 # Shooting date in camera file names: DJI_20260525104306_..., VID_20260525_..., PXL_2026-05-25...
 FILENAME_DATE_RE = re.compile(r'(?<!\d)(20\d{2})[-_]?(\d{2})[-_]?(\d{2})')
@@ -1169,11 +1186,15 @@ class ProcessingThread(QThread):
         for row in self._video_rows:
             meta = row['metadata']
             adobe.append([row['filename'], meta.get('title', ''), meta.get('keywords', ''), '', ''])
-            istock.append([row['filename'], row['created'], meta.get('title', ''), meta.get('description', ''),
-                           meta.get('keywords', ''), self.country, row['poster']])
-        for csv_name, rows in ((VIDEO_CSV_NAME, adobe), (ISTOCK_VIDEO_CSV_NAME, istock)):
+            # Template columns we have no data for (shot speed) stay empty: set them in ESP
+            values = {'file name': row['filename'], 'description': meta.get('description', ''),
+                      'title': meta.get('title', ''), 'country': self.country, 'poster timecode': row['poster'],
+                      'keywords': meta.get('keywords', ''), 'date created': row['created']}
+            istock.append([values.get(name, '') for name in ISTOCK_VIDEO_CSV_FIELDS])
+        # iStock: line endings as in the ESP template (\n)
+        for csv_name, rows, line_end in ((VIDEO_CSV_NAME, adobe, '\r\n'), (ISTOCK_VIDEO_CSV_NAME, istock, '\n')):
             with open(Path(self.output_folder) / csv_name, 'w', newline='', encoding='utf-8') as f:
-                csv.writer(f).writerows(rows)
+                csv.writer(f, lineterminator=line_end).writerows(rows)
     
     def recheck_video_csvs(self):
         """Re-checks video CSVs after all clips are described. Stock sites treat equal titles as duplicates,

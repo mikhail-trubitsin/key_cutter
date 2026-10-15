@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.8
+
+### Changed
+- `istock_videos.csv` follows the ESP template `csv-templates/istock-MetadataTemplate.csv`: columns and their order are read from the template (`file name, description, title, country, poster timecode, keywords, shot speed, date created`), line endings `\n` as in the template. The date column is now `date created` (was `created date`, which ESP does not know). `shot speed` is left empty: set it in ESP. If Getty changes the template, replace the file
+
 ## 1.1.7
 
 ### Fixed

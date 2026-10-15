@@ -467,6 +467,30 @@ class KeychainTest(unittest.TestCase):
         self.assertNotRegex(source, r'sk-(proj-)?[A-Za-z0-9_-]{20,}')
 
 
+class IstockTemplateTest(unittest.TestCase):
+    def test_fields_come_from_esp_template(self):
+        self.assertEqual(main.ISTOCK_VIDEO_CSV_FIELDS, ['file name', 'description', 'title', 'country',
+                                                        'poster timecode', 'keywords', 'shot speed', 'date created'])
+
+    def test_template_header_is_followed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            template = Path(tmp) / 'template.csv'
+            template.write_text('\ufefftitle,file name,new column\n', encoding='utf-8')
+            self.assertEqual(main.load_istock_fields(template), ['title', 'file name', 'new column'])
+            self.assertEqual(main.load_istock_fields(Path(tmp) / 'missing.csv'), main.ISTOCK_DEFAULT_FIELDS)
+
+    def test_row_follows_template_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            thread = make_thread(output_folder=tmp, country='Serbia')
+            meta = {'title': 'T', 'description': 'D', 'keywords': 'a, b'}
+            thread._video_rows.append({'filename': 'x.mov', 'created': '05/25/2026', 'poster': '00:00:07:30',
+                                       'metadata': meta})
+            with mock.patch.object(main, 'ISTOCK_VIDEO_CSV_FIELDS', ['title', 'date created', 'unknown', 'file name']):
+                thread.write_video_csvs()
+            self.assertEqual((Path(tmp) / main.ISTOCK_VIDEO_CSV_NAME).read_text(encoding='utf-8'),
+                             'title,date created,unknown,file name\nT,05/25/2026,,x.mov\n')
+
+
 class RecheckTitlesTest(unittest.TestCase):
     TITLE = "Railway Track Curving Through Sunny Pine Forest"
 
@@ -612,6 +636,10 @@ class BatchProcessingTest(unittest.TestCase):
 
         istock = self.read_csv(main.ISTOCK_VIDEO_CSV_NAME)
         self.assertEqual(list(istock[0].keys()), main.ISTOCK_VIDEO_CSV_FIELDS)
+        raw = (self.output / main.ISTOCK_VIDEO_CSV_NAME).read_bytes()
+        template = main.ISTOCK_TEMPLATE_PATH.read_bytes()
+        self.assertTrue(raw.startswith(template))  # header byte for byte as in the ESP template
+        self.assertNotIn(b'\r\n', raw)
         for adobe_row, istock_row in zip(rows, istock):
             self.assertEqual(istock_row['file name'], adobe_row['Filename'])
             self.assertEqual(istock_row['title'], adobe_row['Title'])
@@ -619,7 +647,8 @@ class BatchProcessingTest(unittest.TestCase):
             self.assertTrue(istock_row['description'])
             self.assertEqual(istock_row['country'], 'Serbia')
             self.assertEqual(istock_row['poster timecode'], '00:00:03:00')  # middle of a 6 s clip
-            self.assertEqual(istock_row['created date'], '')  # no date in test file names
+            self.assertEqual(istock_row['date created'], '')  # no date in test file names
+            self.assertEqual(istock_row['shot speed'], '')
 
         # Videos are not copied, photo is copied with metadata
         self.assertEqual(sorted(p.name for p in self.output.iterdir()),
