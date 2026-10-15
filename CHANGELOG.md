@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.9
+
+### Added
+- iStock keywords are matched to the Getty controlled vocabulary, so ESP accepts them without red "needs clarification" keywords: each keyword becomes the term it means in the clip (`sleepers` -> `Railroad Tie`, `train` -> `Train - Vehicle`, `tranquil` -> `Tranquility`). Candidate terms come from ESP itself (the same lookup as ESP keyword disambiguation), the AI picks the meaning for each clip. Relevant ESP "Get suggestions" terms for the title are added. Up to 48 terms (ESP adds orientation and country itself)
+- `istock_vocabulary.json`: looked-up words are saved, known words need no ESP. New words are looked up through an open ESP tab in Chrome (View > Developer > Allow JavaScript from Apple Events). Without ESP, new words stay as is and the log says so
+- Adobe Stock CSV keeps the plain keywords
+
 ## 1.1.8
 
 ### Changed

@@ -67,10 +67,12 @@ def save_api_key(api_key):
         print(f"Failed to save API key to keychain: {e}")
         return False
 
-__version__ = "1.1.8"
+__version__ = "1.1.9"
 
 # Local models removed - using only OpenAI API
 
+from istock_keywords import (IstockVocabulary, EspUnavailable, esp_lookup_words, esp_title_suggestions,
+                             finalize_terms, MAX_ISTOCK_KEYWORDS)
 from video_utils import (VIDEO_EXTENSIONS, is_video_file, probe_video, check_video_requirements,
                          get_orientation, extract_frames)
 
@@ -392,6 +394,7 @@ class ProcessingThread(QThread):
         
         if not self._stop_requested:
             self.recheck_video_csvs()
+            self.refine_istock_keywords()
             self.log_message.emit("=" * 80)
             self.log_message.emit("[Processing] Processing completed!")
             self.log_message.emit(f"[Processing] Processed files: {processed_count} of {total}")
@@ -1189,7 +1192,8 @@ class ProcessingThread(QThread):
             # Template columns we have no data for (shot speed) stay empty: set them in ESP
             values = {'file name': row['filename'], 'description': meta.get('description', ''),
                       'title': meta.get('title', ''), 'country': self.country, 'poster timecode': row['poster'],
-                      'keywords': meta.get('keywords', ''), 'date created': row['created']}
+                      'keywords': meta.get('istock_keywords') or meta.get('keywords', ''),
+                      'date created': row['created']}
             istock.append([values.get(name, '') for name in ISTOCK_VIDEO_CSV_FIELDS])
         # iStock: line endings as in the ESP template (\n)
         for csv_name, rows, line_end in ((VIDEO_CSV_NAME, adobe, '\r\n'), (ISTOCK_VIDEO_CSV_NAME, istock, '\n')):
@@ -1223,6 +1227,90 @@ class ProcessingThread(QThread):
             self.write_video_csvs()
         self.log_message.emit(f"[Recheck] Repeated titles replaced: {fixed}" +
                               (f", left as is: {len(left)}" if left else "") + ("" if fixed or left else " (none found)"))
+    
+    def refine_istock_keywords(self):
+        """iStock accepts only terms of the Getty vocabulary: each keyword is replaced by the term it means
+        in this clip ("sleepers" -> "Railroad Tie", "train" -> "Train - Vehicle"), relevant ESP title
+        suggestions are added. Candidate terms come from ESP (open ESP tab in Chrome) and are saved
+        to istock_vocabulary.json. Adobe Stock CSV keeps the plain keywords"""
+        if not self._video_rows:
+            return
+        self.log_message.emit(f"[iStock] Matching keywords to the Getty vocabulary...")
+        vocabulary = IstockVocabulary()
+        all_words = [k.strip() for row in self._video_rows
+                     for k in row['metadata'].get('keywords', '').split(',') if k.strip()]
+        missing = vocabulary.missing(all_words)
+        suggestions = {}
+        try:
+            if missing:
+                self.log_message.emit(f"    [iStock] Looking up {len(missing)} new words in ESP...")
+                vocabulary.update(esp_lookup_words(missing))
+                vocabulary.save()
+            suggestions = esp_title_suggestions([row['metadata'].get('title', '') for row in self._video_rows])
+        except EspUnavailable as e:
+            self.log_message.emit(f"    ⚠ [iStock] ESP is not available ({e}). Open esp.gettyimages.com in Chrome "
+                                  f"and allow View > Developer > Allow JavaScript from Apple Events. "
+                                  f"Words not in the saved vocabulary stay as is, no title suggestions")
+        unknown_total = set()
+        for row in self._video_rows:
+            meta = row['metadata']
+            keywords = [k.strip() for k in meta.get('keywords', '').split(',') if k.strip()]
+            candidates = {w: vocabulary.candidates(w) for w in keywords if vocabulary.candidates(w)}
+            unknown = [w for w in keywords if w not in vocabulary.words]
+            unknown_total.update(unknown)
+            title_suggestions = suggestions.get(meta.get('title', ''), [])
+            chosen = self._choose_istock_terms(meta, candidates, title_suggestions)
+            if chosen is None:
+                # No AI: only words with a single meaning are replaced
+                chosen = ({w: c[0] for w, c in candidates.items() if len(c) == 1}, [])
+            choices, suggested = chosen
+            terms = finalize_terms(keywords, choices, suggested, candidates, title_suggestions, unknown)
+            meta['istock_keywords'] = ', '.join(terms)
+            dropped = [w for w in keywords if w not in unknown and not (choices.get(w) and w in candidates)]
+            self.log_message.emit(f"    [iStock] {row['filename']}: {len(terms)} terms"
+                                  + (f", dropped (no fitting meaning): {', '.join(dropped)}" if dropped else ""))
+        self.write_video_csvs()
+        if unknown_total:
+            self.log_message.emit(f"[iStock] ⚠ {len(unknown_total)} words were not checked in ESP and stay as is")
+        self.log_message.emit(f"[iStock] Keywords matched to the Getty vocabulary")
+    
+    def _choose_istock_terms(self, metadata, candidates, suggestions):
+        """AI picks the meaning of each keyword in this clip and relevant suggestion terms.
+        Returns ({word: term or None}, [suggested terms]) or None without AI"""
+        if not OPENAI_AVAILABLE or not self.api_key:
+            return None
+        prompt = (
+            "You map stock footage keywords to the Getty Images / iStock controlled vocabulary.\n"
+            f"Clip title: {metadata.get('title', '')}\n"
+            f"Clip description: {metadata.get('description', '')}\n\n"
+            "The keywords were already chosen from the clip frames: what they name IS in the clip, even if "
+            "the title and description do not mention it. Do not judge whether a keyword belongs to the clip, "
+            "only pick its meaning. For each keyword choose the ONE candidate term with the meaning the "
+            "keyword has in this clip (e.g. 'train' in a railway clip is 'Train - Vehicle', not "
+            "'Sports Training'; 'sleepers' is 'Railroad Tie'; 'forest' is 'Forest'; 'green' is "
+            "'Green Color'). Use null ONLY when every candidate has a different meaning "
+            "(e.g. 'Summer Olympic Games' for 'summer' would be wrong, but 'Summer' is right).\n"
+            f"Keywords and candidates: {json.dumps(candidates, ensure_ascii=False)}\n\n"
+            "Then pick from the suggested terms only those that clearly describe this clip "
+            "(no wrong places, no things that are not in the clip).\n"
+            f"Suggested terms: {json.dumps(suggestions, ensure_ascii=False)}\n\n"
+            'Return JSON: {"choices": {"keyword": "Term or null"}, "suggested": ["Term"]}. '
+            "Use the terms exactly as given.")
+        try:
+            client = OpenAI(api_key=self.api_key)
+            response = client.chat.completions.create(
+                model=OPENAI_MODEL,
+                reasoning_effort="none",
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                max_completion_tokens=3000,
+                temperature=0.2
+            )
+            data = json.loads(response.choices[0].message.content or '{}')
+            return data.get('choices') or {}, data.get('suggested') or []
+        except Exception as e:
+            self.log_message.emit(f"    ⚠ [iStock] Term choice failed: {str(e)}")
+            return None
     
     def _make_title_unique(self, metadata, taken_titles):
         """New title not in taken_titles (lowercase) and without description words.

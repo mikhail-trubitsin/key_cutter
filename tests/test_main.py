@@ -13,6 +13,29 @@ from unittest import mock
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
 import main  # noqa: E402
+import istock_keywords  # noqa: E402
+
+VOCAB_TMP = tempfile.TemporaryDirectory()
+_module_patches = []
+
+
+def setUpModule():
+    """Tests never reach the ESP tab in Chrome or the real istock_vocabulary.json"""
+    unavailable = mock.Mock(side_effect=istock_keywords.EspUnavailable("tests"))
+    _module_patches.extend([
+        mock.patch.object(istock_keywords, 'run_in_esp_tab', unavailable),
+        mock.patch.object(main, 'esp_lookup_words', unavailable),
+        mock.patch.object(main, 'esp_title_suggestions', unavailable),
+        mock.patch.object(main, 'IstockVocabulary',
+                          lambda: istock_keywords.IstockVocabulary(Path(VOCAB_TMP.name) / 'vocabulary.json')),
+    ])
+    for patch in _module_patches:
+        patch.start()
+
+
+def tearDownModule():
+    for patch in _module_patches:
+        patch.stop()
 
 FFMPEG_AVAILABLE = shutil.which('ffmpeg') is not None and shutil.which('ffprobe') is not None
 
@@ -616,6 +639,7 @@ class BatchProcessingTest(unittest.TestCase):
         thread = make_thread(input_folder=str(self.input), output_folder=str(self.output), country=country)
         thread.analyze_image_with_ai = analyze
         thread._rewrite_description = mock.Mock(return_value=None)
+        thread._choose_istock_terms = mock.Mock(return_value=None)
         thread.write_iptc_with_exiftool = mock.Mock(side_effect=FileNotFoundError)
         thread.run()
         return thread
@@ -643,7 +667,9 @@ class BatchProcessingTest(unittest.TestCase):
         for adobe_row, istock_row in zip(rows, istock):
             self.assertEqual(istock_row['file name'], adobe_row['Filename'])
             self.assertEqual(istock_row['title'], adobe_row['Title'])
-            self.assertEqual(istock_row['keywords'], adobe_row['Keywords'])
+            # ESP not available in tests: words stay as is, up to the iStock limit
+            self.assertEqual(istock_row['keywords'].split(', '),
+                             adobe_row['Keywords'].split(', ')[:main.MAX_ISTOCK_KEYWORDS])
             self.assertTrue(istock_row['description'])
             self.assertEqual(istock_row['country'], 'Serbia')
             self.assertEqual(istock_row['poster timecode'], '00:00:03:00')  # middle of a 6 s clip
